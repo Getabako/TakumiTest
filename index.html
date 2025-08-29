@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="ja" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>多言語翻訳アプリ</title>
+    <style>
+        :root {
+            --primary-color: #4F46E5;
+            --secondary-color: #10B981;
+            --background-light: #FFFFFF;
+            --background-dark: #1F2937;
+            --text-light: #1F2937;
+            --text-dark: #F9FAFB;
+        }
+
+        [data-theme="dark"] {
+            --background-light: var(--background-dark);
+            --text-light: var(--text-dark);
+        }
+
+        body {
+            margin: 0;
+            font-family: sans-serif;
+            background: var(--background-light);
+            color: var(--text-light);
+            transition: background 0.3s, color 0.3s;
+        }
+
+        header.app-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem;
+            background: var(--primary-color);
+            color: #fff;
+        }
+
+        .header-controls button {
+            margin-left: 0.5rem;
+            cursor: pointer;
+        }
+
+        main.container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            padding: 1rem;
+        }
+
+        section {
+            background: rgba(0,0,0,0.03);
+            padding: 1rem;
+            border-radius: 8px;
+        }
+
+        .controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+
+        textarea {
+            width: 100%;
+            min-height: 150px;
+            padding: 0.5rem;
+            resize: vertical;
+        }
+
+        .action-buttons {
+            text-align: right;
+            margin-top: 0.5rem;
+        }
+
+        .action-buttons button {
+            margin-left: 0.5rem;
+        }
+
+        .target-languages {
+            margin-bottom: 1rem;
+        }
+
+        #translationResults .result-card {
+            background: var(--background-light);
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            padding: 0.5rem;
+            margin-bottom: 0.5rem;
+            position: relative;
+            animation: fadeIn 0.3s ease-in;
+        }
+
+        .result-card button.copy-btn {
+            position: absolute;
+            top: 0.5rem;
+            right: 0.5rem;
+            cursor: pointer;
+        }
+
+        footer {
+            text-align: center;
+            padding: 1rem;
+        }
+
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 10;
+            left: 0; top: 0;
+            width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5);
+        }
+
+        .modal-content {
+            background: var(--background-light);
+            margin: 10% auto;
+            padding: 1rem;
+            width: 90%;
+            max-width: 500px;
+            border-radius: 8px;
+        }
+
+        .close {
+            float: right;
+            font-size: 1.2rem;
+            cursor: pointer;
+        }
+
+        /* Notifications */
+        .notification {
+            position: fixed;
+            bottom: 1rem;
+            right: 1rem;
+            background: var(--secondary-color);
+            color: #fff;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            animation: fadeIn 0.3s ease, fadeOut 0.3s ease 2.7s;
+        }
+
+        @keyframes fadeIn {
+            from {opacity: 0;}
+            to {opacity:1;}
+        }
+
+        @keyframes fadeOut {
+            from {opacity:1;}
+            to {opacity:0;}
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            main.container {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+<header class="app-header">
+    <h1>🌐 多言語翻訳アプリ</h1>
+    <div class="header-controls">
+        <button id="themeToggle">🌙</button>
+        <button id="settingsBtn">⚙️</button>
+    </div>
+</header>
+
+<main class="container">
+    <section class="input-section">
+        <div class="controls">
+            <select id="sourceLang"></select>
+            <span class="char-count">0 / 5000</span>
+        </div>
+        <textarea id="inputText" placeholder="翻訳したいテキストを入力..."></textarea>
+        <div class="action-buttons">
+            <button id="clearBtn">クリア</button>
+            <button id="translateBtn">翻訳する</button>
+        </div>
+    </section>
+
+    <section class="output-section">
+        <div class="target-languages">
+            <h3>翻訳先言語を選択:</h3>
+            <div id="targetLangContainer"></div>
+        </div>
+        <div id="translationResults"></div>
+    </section>
+</main>
+
+<footer>
+    <button id="historyBtn">履歴</button>
+    <span id="usageStatus"></span>
+</footer>
+
+<div id="historyModal" class="modal" aria-hidden="true">
+    <div class="modal-content">
+        <span class="close" id="historyClose">&times;</span>
+        <h2>翻訳履歴</h2>
+        <div id="historyList"></div>
+    </div>
+</div>
+
+<div id="loader" style="display:none">Loading...</div>
+
+<script src="config.js"></script>
+<script>
+const API_KEY = window.API_KEY || 'YOUR_GEMINI_API_KEY';
+const API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent';
+const LANGUAGES = {
+    'auto': '自動検出',
+    'ja': '日本語',
+    'en': '英語',
+    'zh-CN': '中国語（簡体字）',
+    'zh-TW': '中国語（繁体字）',
+    'ko': '韓国語',
+    'es': 'スペイン語',
+    'fr': 'フランス語',
+    'de': 'ドイツ語',
+    'pt': 'ポルトガル語',
+    'ru': 'ロシア語',
+    'ar': 'アラビア語',
+    'hi': 'ヒンディー語',
+    'th': 'タイ語',
+    'vi': 'ベトナム語',
+    'it': 'イタリア語'
+};
+
+const translationCache = new Map();
+
+// Debounce utility
+function debounce(func, wait) {
+    let timeout;
+    return function(...args) {
+        clearTimeout(timeout);
+        timeout = setTimeout(() => func.apply(this, args), wait);
+    };
+}
+
+function getCacheKey(text, source, target) {
+    return `${source}_${target}_${text}`;
+}
+
+// Settings storage
+const Settings = {
+    save(key, value){ localStorage.setItem(key, JSON.stringify(value)); },
+    load(key){ const v = localStorage.getItem(key); return v ? JSON.parse(v) : null; }
+};
+
+// Initialization
+document.addEventListener('DOMContentLoaded', initializeApp);
+
+function initializeApp() {
+    setupLanguageSelectors();
+    setupEventListeners();
+    loadSettings();
+    updateCharCount();
+}
+
+function setupLanguageSelectors() {
+    const sourceSel = document.getElementById('sourceLang');
+    for (const [code, name] of Object.entries(LANGUAGES)) {
+        const opt = document.createElement('option');
+        opt.value = code; opt.textContent = name;
+        sourceSel.appendChild(opt);
+    }
+
+    const targetContainer = document.getElementById('targetLangContainer');
+    for (const [code, name] of Object.entries(LANGUAGES)) {
+        if (code === 'auto') continue;
+        const label = document.createElement('label');
+        label.style.display = 'inline-block';
+        label.style.marginRight = '0.5rem';
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.value = code;
+        label.appendChild(cb);
+        label.append(name);
+        targetContainer.appendChild(label);
+    }
+}
+
+function setupEventListeners() {
+    document.getElementById('inputText').addEventListener('input', debounce(updateCharCount, 200));
+    document.getElementById('clearBtn').addEventListener('click', () => {
+        document.getElementById('inputText').value = '';
+        updateCharCount();
+    });
+    document.getElementById('translateBtn').addEventListener('click', handleTranslate);
+    document.getElementById('themeToggle').addEventListener('click', toggleTheme);
+    document.getElementById('historyBtn').addEventListener('click', openHistory);
+    document.getElementById('historyClose').addEventListener('click', closeHistory);
+    document.getElementById('historyModal').addEventListener('click', (e)=>{ if(e.target.id==='historyModal') closeHistory(); });
+}
+
+function loadSettings() {
+    const theme = Settings.load('theme');
+    if (theme) {
+        document.documentElement.setAttribute('data-theme', theme);
+    }
+}
+
+function updateCharCount() {
+    const text = document.getElementById('inputText').value;
+    document.querySelector('.char-count').textContent = `${text.length} / 5000`;
+}
+
+async function handleTranslate() {
+    const text = document.getElementById('inputText').value.trim();
+    if (!text) {
+        showNotification('テキストを入力してください', 'error');
+        return;
+    }
+    if (text.length > 5000) {
+        showNotification('文字数は5000以内にしてください', 'error');
+        return;
+    }
+
+    const source = document.getElementById('sourceLang').value;
+    const targets = [...document.querySelectorAll('#targetLangContainer input:checked')].map(cb=>cb.value);
+    if (targets.length === 0) {
+        showNotification('翻訳先言語を選択してください', 'error');
+        return;
+    }
+    showLoading(true);
+    document.getElementById('translationResults').innerHTML='';
+
+    for (const target of targets) {
+        const key = getCacheKey(text, source, target);
+        let translated;
+        if (translationCache.has(key)) {
+            translated = translationCache.get(key);
+        } else {
+            try {
+                translated = await translateWithGemini(text, source, target);
+                translationCache.set(key, translated);
+            } catch (e) {
+                showNotification('翻訳に失敗しました', 'error');
+                continue;
+            }
+        }
+        addTranslationResult(target, translated);
+        saveHistory(text, source, target, translated);
+    }
+    showLoading(false);
+}
+
+async function translateWithGemini(text, sourceLang, targetLang) {
+    const prompt = createTranslationPrompt(text, sourceLang, targetLang);
+    const res = await fetch(API_URL + '?key=' + API_KEY, {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({
+            contents: [{parts:[{text: prompt}]}]
+        })
+    });
+    if (!res.ok) throw new Error('API error');
+    const data = await res.json();
+    return extractTranslation(data);
+}
+
+function createTranslationPrompt(text, source, target) {
+    return `Translate the following text from ${source} to ${target}.\nReturn ONLY the translated text without any explanation or additional text.\n\nText to translate: ${text}`;
+}
+
+function extractTranslation(data) {
+    try {
+        return data.candidates[0].content.parts[0].text.trim();
+    } catch(e){
+        throw new Error('No translation');
+    }
+}
+
+function addTranslationResult(lang, text) {
+    const container = document.getElementById('translationResults');
+    const card = document.createElement('div');
+    card.className = 'result-card';
+    const label = document.createElement('h4');
+    label.textContent = LANGUAGES[lang];
+    const p = document.createElement('p');
+    p.textContent = text;
+    const copyBtn = document.createElement('button');
+    copyBtn.textContent = 'コピー';
+    copyBtn.className = 'copy-btn';
+    copyBtn.addEventListener('click', ()=>copyText(text));
+    card.appendChild(label);
+    card.appendChild(p);
+    card.appendChild(copyBtn);
+    container.appendChild(card);
+}
+
+function copyText(text) {
+    navigator.clipboard.writeText(text).then(()=>{
+        showNotification('コピーしました', 'success');
+    });
+}
+
+function toggleTheme() {
+    const html = document.documentElement;
+    const newTheme = html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    html.setAttribute('data-theme', newTheme);
+    Settings.save('theme', newTheme);
+}
+
+function showNotification(message, type='info') {
+    const n = document.createElement('div');
+    n.className = `notification ${type}`;
+    n.textContent = message;
+    document.body.appendChild(n);
+    setTimeout(()=>n.remove(),3000);
+}
+
+function showLoading(show) {
+    document.getElementById('loader').style.display = show ? 'block' : 'none';
+}
+
+function saveHistory(text, source, target, result) {
+    const history = Settings.load('history') || [];
+    history.unshift({text, source, target, result, ts: Date.now()});
+    if (history.length > 20) history.pop();
+    Settings.save('history', history);
+}
+
+function openHistory() {
+    const modal = document.getElementById('historyModal');
+    const list = document.getElementById('historyList');
+    list.innerHTML = '';
+    const history = Settings.load('history') || [];
+    history.forEach(item => {
+        const div = document.createElement('div');
+        const date = new Date(item.ts).toLocaleString();
+        div.textContent = `${date} [${LANGUAGES[item.source]}→${LANGUAGES[item.target]}]: ${item.result}`;
+        list.appendChild(div);
+    });
+    modal.style.display = 'block';
+    modal.setAttribute('aria-hidden','false');
+}
+
+function closeHistory() {
+    const modal = document.getElementById('historyModal');
+    modal.style.display = 'none';
+    modal.setAttribute('aria-hidden','true');
+}
+</script>
+</body>
+</html>
