@@ -1,0 +1,15 @@
+export const languages = [
+  { code: 'auto', name: 'Auto Detect' },
+  { code: 'ja', name: 'Japanese' },
+  { code: 'en', name: 'English' },
+  { code: 'zh-CN', name: 'Chinese (Simplified)' },
+  { code: 'zh-TW', name: 'Chinese (Traditional)' },
+  { code: 'ko', name: 'Korean' },
+  { code: 'es', name: 'Spanish' },
+  { code: 'fr', name: 'French' },
+  { code: 'de', name: 'German' },
+  { code: 'pt', name: 'Portuguese' },
+  { code: 'ru', name: 'Russian' },
+  { code: 'ar', name: 'Arabic' },
+  { code: 'hi', name: 'Hindi' },
+];
